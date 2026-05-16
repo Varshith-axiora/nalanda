@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { cn, Avatar, ToastNotification } from "./components";
 import { navByRole, uid, now } from "./types";
 import type { AppData, ModuleKey, User, LoginSecurity } from "./types";
-import { seedData } from "./seedData";
+// import { seedData } from "./seedData";
 import { api } from "./lib/api";
 import { setToastHandler } from "./toast";
 import Login from "./pages/Login";
@@ -77,103 +77,16 @@ function useLocalState<T>(key: string, init: T) {
 }
 
 function normalizeData(data: AppData): AppData {
-  // Collect all archived entity IDs to prevent re-adding deleted items from seed
-  const archivedIds = new Set((data.archive || []).map((r) => r.entityId));
-  (data.archive || []).forEach((r) => {
-    r.relatedData?.chapters?.forEach((ch) => archivedIds.add(ch.id));
-    r.relatedData?.assessments?.forEach((a) => archivedIds.add(a.id));
-  });
-
-  const mergeById = <T extends { id: string }>(current: T[], seeded: T[]) => {
-    const currentIds = new Set(current.map((item) => item.id));
-    return [
-      ...current,
-      ...seeded.filter(
-        (item) => !currentIds.has(item.id) && !archivedIds.has(item.id),
-      ),
-    ];
-  };
-
-  const existingUserIds = new Set(data.users.map((user) => user.id));
-  const users = [
-    ...data.users.map((user) => {
-      const seedUser = seedData.users.find((item) => item.id === user.id);
-      return {
-        ...user,
-        role:
-          user.id === "EMP-1001" && user.role === "Admin"
-            ? "Super Admin"
-            : user.role,
-        team: user.team || seedUser?.team || "Unassigned",
-      };
-    }),
-    ...seedData.users.filter(
-      (user) => !existingUserIds.has(user.id) && !archivedIds.has(user.id),
-    ),
-  ];
-  const skills = mergeById(data.skills || [], seedData.skills);
-  const targetSkills = mergeById(
-    data.targetSkills || [],
-    seedData.targetSkills,
-  );
-  const courses = mergeById(data.courses || [], seedData.courses);
-  const chapters = mergeById(data.chapters || [], seedData.chapters);
-  const assessments = mergeById(data.assessments || [], seedData.assessments);
-
   return {
     ...data,
-    users,
-    skills,
-    targetSkills,
-    chapters,
-    courses: courses.map((course) => {
-      const seedCourse = seedData.courses.find((item) => item.id === course.id);
-      const skill = skills.find((item) => item.name === course.skill);
-      return {
-        ...course,
-        skillIds: course.skillIds?.length
-          ? course.skillIds
-          : seedCourse?.skillIds || (skill ? [skill.id] : []),
-        targetLevel:
-          course.targetLevel || seedCourse?.targetLevel || course.difficulty,
-        prerequisites: course.prerequisites || [],
-      };
-    }),
-    enrollments: data.enrollments.map((enrollment) => ({
-      ...enrollment,
-      dueAt: enrollment.dueAt || null,
-      priority: enrollment.priority || "Medium",
-      mandatory: enrollment.mandatory ?? false,
-    })),
-    assessments: assessments.map((assessment) => {
-      const course = courses.find((item) => item.id === assessment.courseId);
-      const seedAssessment = seedData.assessments.find(
-        (item) => item.id === assessment.id,
-      );
-      const questions =
-        seedAssessment &&
-        seedAssessment.questions.length > assessment.questions.length
-          ? seedAssessment.questions
-          : assessment.questions;
-      return {
-        ...assessment,
-        difficulty: assessment.difficulty || course?.difficulty || "Beginner",
-        questionLimit:
-          assessment.questionLimit ||
-          seedAssessment?.questionLimit ||
-          Math.min(10, questions?.length || 10),
-        questions,
-        createdAt: assessment.createdAt || now(),
-        updatedAt: assessment.updatedAt || assessment.createdAt || now(),
-      };
-    }),
-    attempts: data.attempts.map((attempt) => ({
-      ...attempt,
-      selectedQuestionIds: attempt.selectedQuestionIds || [],
-      tabSwitchWarnings: attempt.tabSwitchWarnings || 0,
-      autoSubmittedReason: attempt.autoSubmittedReason || null,
-      proctorCaptures: attempt.proctorCaptures || [],
-    })),
+    users: data.users || [],
+    skills: data.skills || [],
+    targetSkills: data.targetSkills || [],
+    chapters: data.chapters || [],
+    courses: data.courses || [],
+    enrollments: data.enrollments || [],
+    assessments: data.assessments || [],
+    attempts: data.attempts || [],
     archive: data.archive || [],
     loginSecurity: data.loginSecurity || {},
     sessionVersion: data.sessionVersion || {},
@@ -184,7 +97,7 @@ function normalizeData(data: AppData): AppData {
 export default function App() {
   const [rawData, setDataState] = useLocalState<AppData>(
     "nalanda-v3",
-    seedData,
+    { users: [], courses: [], enrollments: [], attempts: [], audit: [], skills: [], targetSkills: [], chapters: [], assessments: [], archive: [], loginSecurity: {}, sessionVersion: {}, issuedCertificates: [] } as any,
   );
   const data = normalizeData(rawData);
   const [sessionId, setSessionId] = useLocalState<string | null>(
@@ -243,9 +156,7 @@ export default function App() {
   );
 
   const resetDemo = () => {
-    setDataState(seedData);
-    setSessionId(null);
-    setSessionVersion(null);
+    setToastMsg("Resetting is disabled in production.");
   };
 
   const handleUpdateSecurity = useCallback(
@@ -265,19 +176,26 @@ export default function App() {
     const validate = async () => {
       // 1. Fetch real data from backend
       try {
-        const [usersRes, coursesRes] = await Promise.all([
+        const [usersRes, coursesRes, assignmentsRes, assessmentsRes, skillsRes, archiveRes] = await Promise.all([
           api.get("/api/users"),
-          api.get("/api/courses")
+          api.get("/api/courses"),
+          api.get("/api/assignments"),
+          api.get("/api/assessments"),
+          api.get("/api/skills"),
+          api.get("/api/archive")
         ]);
         
         setDataState(prev => ({
           ...prev,
           users: usersRes.data.data,
-          courses: coursesRes.data.data
+          courses: coursesRes.data.data,
+          enrollments: assignmentsRes.data.data,
+          assessments: assessmentsRes.data.data,
+          skills: skillsRes.data.data,
+          archive: archiveRes.data.data
         }));
       } catch (err) {
         console.error("Failed to fetch real data from API", err);
-        // If 401 Unauthorized, api interceptor handles the token clear, but we should also force signout here
       }
 
       // 2. Validate current session against fetched data

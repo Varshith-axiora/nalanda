@@ -10,102 +10,119 @@ model User {
   id                  String       @id
   name                String
   email               String       @unique
-  passwordHash        String
-  department          String
-  role                String
-  managerId           String?
+  passwordHash        String?      @map("password_hash")
+  department          String?      @default("Unassigned")
+  role                String       @default("Employee")
+  managerId           String?      @map("manager_id")
   manager             User?        @relation("UserToManager", fields: [managerId], references: [id])
   team                User[]       @relation("UserToManager")
   status              String       @default("Active")
-  createdAt           DateTime     @default(now())
-  updatedAt           DateTime     @updatedAt
+  sessionVersion      Int          @default(0) @map("session_version")
+  createdAt           DateTime     @default(now()) @map("created_at")
+  updatedAt           DateTime     @updatedAt @map("updated_at")
   courses             Course[]     @relation("CourseOwner")
   enrollments         Enrollment[]
   assignments         Assignment[] @relation("AssignedTo")
   assignmentsAssigned Assignment[] @relation("AssignedBy")
+
+  @@map("users")
 }
 
 model Course {
   id           String       @id
   title        String
   description  String
-  skill        String
-  tags         String[]
-  contentTypes String[]
+  skill        String       @default("")
+  skillIds     String[]     @default([]) @map("skill_ids")
+  targetLevel  String       @default("Intermediate") @map("target_level")
+  prerequisites String[]    @default([])
+  tags         String[]     @default([])
   approval     String       @default("Pending")
   status       String       @default("Active")
-  ownerId      String
+  ownerId      String       @map("owner_id")
   owner        User         @relation("CourseOwner", fields: [ownerId], references: [id])
-  version      Int          @default(1)
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
+  version      Int          @default(1) // Renamed current_version to version in DB
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
   assessments  Assessment[]
   enrollments  Enrollment[]
   assignments  Assignment[]
+
+  @@map("courses")
 }
 
 model Assessment {
   id              String   @id
   title           String
-  courseId        String
+  courseId        String   @map("course_id")
   course          Course   @relation(fields: [courseId], references: [id])
   type            String
   approval        String   @default("Pending")
-  strictMode      Boolean  @default(true)
+  strictMode      Boolean  @default(true) @map("strict_mode")
   questions       Json
-  durationMinutes Int
-  passScore       Int
-  ownerId         String
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  durationMinutes Int      @map("duration_minutes")
+  passScore       Int      @map("pass_score")
+  ownerId         String   @map("owner_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@map("assessments")
 }
 
 model Enrollment {
   id               String    @id @default(uuid())
-  userId           String
-  courseId         String
+  userId           String    @map("user_id")
+  courseId         String    @map("course_id")
   user             User      @relation(fields: [userId], references: [id])
   course           Course    @relation(fields: [courseId], references: [id])
   progress         Int       @default(0)
-  timeSpentSeconds Int       @default(0)
+  timeSpentSeconds Int       @default(0) @map("time_spent_minutes")
   status           String    @default("InProgress")
-  completedAt      DateTime?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  completedAt      DateTime? @map("completed_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  @@map("enrollments")
 }
 
 model Assignment {
   id               String    @id @default(uuid())
-  courseId         String
-  userId           String
-  assignedBy       String
+  courseId         String    @map("course_id")
+  userId           String    @map("user_id")
+  assignedBy       String    @map("assigned_by")
   user             User      @relation("AssignedTo", fields: [userId], references: [id])
   assigner         User      @relation("AssignedBy", fields: [assignedBy], references: [id])
   course           Course    @relation(fields: [courseId], references: [id])
   progress         Int       @default(0)
-  timeSpentSeconds Int       @default(0)
-  completedAt      DateTime?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  timeSpentSeconds Int       @default(0) @map("time_spent_minutes")
+  completedAt      DateTime? @map("completed_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  @@map("assignments")
 }
 
 model AuditLog {
   id         String   @id @default(uuid())
-  actorId    String
+  actorId    String   @map("actor_id")
   action     String
-  entityType String
-  entityId   String
+  entityType String   @map("entity_type")
+  entityId   String   @map("entity_id")
   metadata   Json?
-  createdAt  DateTime @default(now())
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@map("audit_logs")
 }
 
 model Archive {
   id              String   @id @default(uuid())
-  entityType      String
-  entityId        String
-  entityData      Json
-  deletedBy       String
-  deletedByName   String
-  deletionComment String
-  deletedAt       DateTime @default(now())
+  entityType      String   @map("entity_type")
+  entityId        String   @map("entity_id")
+  entityData      Json     @map("entity_data")
+  deletedBy       String   @map("deleted_by")
+  deletedByName   String   @map("deleted_by_name")
+  deletionComment String   @map("deletion_comment")
+  deletedAt       DateTime @default(now()) @map("deleted_at")
+
+  @@map("deleted_archives")
 }

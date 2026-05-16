@@ -161,26 +161,21 @@ export default function Skills({
     ],
   });
 
-  const saveSkill = (event: FormEvent) => {
+  const saveSkill = async (event: FormEvent) => {
     event.preventDefault();
     if (!skillForm.name.trim()) return;
-    const skill: Skill = {
-      id: uid("SKILL"),
-      name: skillForm.name.trim(),
-      category: skillForm.category,
-      description: skillForm.description,
-      status: "Active",
-      createdAt: now(),
-    };
-    setData(
-      addAudit(
-        { ...data, skills: [skill, ...data.skills] },
-        "Created skill",
-        skill.id,
-      ),
-    );
-    setSkillForm({ name: "", category: "Technical", description: "" });
-    setSkillOpen(false);
+    try {
+      await api.post("/api/skills", {
+        name: skillForm.name.trim(),
+        category: skillForm.category,
+        description: skillForm.description,
+      });
+      setSkillForm({ name: "", category: "Technical", description: "" });
+      setSkillOpen(false);
+      toast("Skill created successfully");
+    } catch (err: any) {
+      toast(err.response?.data?.error || "Failed to create skill");
+    }
   };
 
   const saveTarget = (event: FormEvent) => {
@@ -208,24 +203,16 @@ export default function Skills({
     setTargetOpen(false);
   };
 
-  const toggleSkill = (skillId: string) => {
-    setData(
-      addAudit(
-        {
-          ...data,
-          skills: data.skills.map((skill) =>
-            skill.id === skillId
-              ? {
-                  ...skill,
-                  status: skill.status === "Active" ? "Inactive" : "Active",
-                }
-              : skill,
-          ),
-        },
-        "Updated skill status",
-        skillId,
-      ),
-    );
+  const toggleSkill = async (skillId: string) => {
+    const skill = data.skills.find((s) => s.id === skillId);
+    if (!skill) return;
+    const newStatus = skill.status === "Active" ? "Inactive" : "Active";
+    try {
+      await api.patch(`/api/skills/${skillId}`, { status: newStatus });
+      toast(newStatus === "Active" ? "Skill activated" : "Skill deactivated");
+    } catch (err: any) {
+      toast(err.response?.data?.error || "Failed to update skill");
+    }
   };
 
   return (

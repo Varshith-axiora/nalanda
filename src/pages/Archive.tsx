@@ -191,38 +191,13 @@ export default function Archive({
     ],
   });
 
-  const restore = (record: ArchivedRecord) => {
-    let next = { ...data };
-
-    if (record.entityType === "User") {
-      next.users = [record.entityData as User, ...next.users];
-    } else if (record.entityType === "Course") {
-      next.courses = [record.entityData as Course, ...next.courses];
-      if (record.relatedData?.chapters)
-        next.chapters = [...record.relatedData.chapters, ...next.chapters];
-      if (record.relatedData?.assessments)
-        next.assessments = [
-          ...record.relatedData.assessments,
-          ...next.assessments,
-        ];
-      if (record.relatedData?.enrollments)
-        next.enrollments = [
-          ...record.relatedData.enrollments,
-          ...next.enrollments,
-        ];
-    } else if (record.entityType === "Assessment") {
-      next.assessments = [record.entityData as Assessment, ...next.assessments];
+  const restore = async (record: ArchivedRecord) => {
+    try {
+      await api.post(`/api/archive/${record.id}/restore`);
+      toast(`${record.entityType} restored successfully`);
+    } catch (err: any) {
+      toast(err.response?.data?.error || "Failed to restore record");
     }
-
-    next.archive = next.archive.filter((r) => r.id !== record.id);
-    setData(
-      addAudit(
-        next,
-        `Restored ${record.entityType.toLowerCase()} from archive`,
-        record.entityId,
-      ),
-    );
-    toast(`${record.entityType} restored successfully`);
   };
 
   return (

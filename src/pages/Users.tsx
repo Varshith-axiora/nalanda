@@ -234,74 +234,39 @@ export default function Users({
     ],
   });
 
-  const saveEmployee = (event: FormEvent) => {
+  const saveEmployee = async (event: FormEvent) => {
     event.preventDefault();
     if (!form.employeeId.trim() || !form.name.trim() || !form.email.trim())
       return;
-    const baseUser = {
-      name: form.name,
-      email: form.email,
-      password: form.password,
-      avatar: initials(form.name),
-      role: form.role,
-      department: form.department,
-      team: form.team,
-      designation: form.designation,
-      managerId: form.managerId || null,
-      status: form.status,
-      joinedAt: form.dateOfJoining,
-    };
 
-    if (editing) {
-      let nextData = addAudit(
-        {
-          ...data,
-          users: data.users.map((user) =>
-            user.id === editing.id ? { ...user, ...baseUser } : user,
-          ),
-        },
-        "Updated employee profile",
-        editing.id,
-      );
-      // If status changed to Inactive, increment sessionVersion to revoke sessions
-      if (form.status === "Inactive" && editing.status === "Active") {
-        const sv = { ...(nextData.sessionVersion || {}) };
-        sv[editing.id] = (sv[editing.id] || 0) + 1;
-        nextData = { ...nextData, sessionVersion: sv };
+    try {
+      if (editing) {
+        const response = await api.patch(`/api/users/${editing.id}`, {
+          name: form.name,
+          department: form.department,
+          role: form.role,
+          managerId: form.managerId || null,
+          status: form.status,
+        });
+        toast("Employee updated successfully");
+      } else {
+        await api.post("/api/users", {
+          name: form.name,
+          email: form.email,
+          department: form.department,
+          role: form.role,
+          managerId: form.managerId || null,
+          password: form.password,
+        });
+        toast("Employee created successfully");
       }
-      setData(nextData);
-      toast("Employee updated successfully");
-    } else {
-      if (data.users.some((user) => user.id === form.employeeId)) return;
-      const newUser: User = {
-        id: form.employeeId,
-        lastActive: "Never",
-        preferences: {
-          theme: "dark",
-          language: "en",
-          emailNotifications: true,
-          pushNotifications: true,
-          weeklyDigest: true,
-          courseReminders: true,
-          fontSize: "medium",
-          reducedMotion: false,
-          highContrast: false,
-        },
-        ...baseUser,
-      };
-      setData(
-        addAudit(
-          { ...data, users: [newUser, ...data.users] },
-          "Created employee",
-          newUser.id,
-        ),
-      );
-      toast("Employee created successfully");
+      setOpen(false);
+      setEditing(null);
+      setForm(blankForm(managers[0]?.id || ""));
+      // Trigger a re-fetch of all data in App.tsx by updating a dummy state or relying on the interval
+    } catch (err: any) {
+      toast(err.response?.data?.error || "Failed to save employee");
     }
-
-    setOpen(false);
-    setEditing(null);
-    setForm(blankForm(managers[0]?.id || ""));
   };
 
   const editEmployee = (user: User) => {
@@ -310,63 +275,33 @@ export default function Users({
     setOpen(true);
   };
 
-  const patch = (
+  const patch = async (
     id: string,
     patchData: Partial<User>,
     action = "Updated employee",
   ) => {
-    let nextData = addAudit(
-      {
-        ...data,
-        users: data.users.map((user) =>
-          user.id === id ? { ...user, ...patchData } : user,
-        ),
-      },
-      action,
-      id,
-    );
-    // Increment sessionVersion when deactivating to immediately revoke active sessions
-    if (patchData.status === "Inactive") {
-      const sv = { ...(nextData.sessionVersion || {}) };
-      sv[id] = (sv[id] || 0) + 1;
-      nextData = { ...nextData, sessionVersion: sv };
+    try {
+      await api.patch(`/api/users/${id}`, patchData);
+      if (action.includes("Deactivated"))
+        toast("Employee deactivated — active sessions revoked");
+      else if (action.includes("Activated"))
+        toast("Employee activated successfully");
+      else
+        toast("Employee updated successfully");
+    } catch (err: any) {
+      toast(err.response?.data?.error || "Failed to update employee");
     }
-    setData(nextData);
-    if (action.includes("Deactivated"))
-      toast("Employee deactivated — active sessions revoked");
-    else if (action.includes("Activated"))
-      toast("Employee activated successfully");
   };
 
-  const handleDeleteUser = (comment: string) => {
+  const handleDeleteUser = async (comment: string) => {
     if (!deleteTarget) return;
-    const archived: ArchivedRecord = {
-      id: uid("ARC"),
-      entityType: "User",
-      entityId: deleteTarget.id,
-      entityData: { ...deleteTarget },
-      deletedBy: currentUser.id,
-      deletedByName: currentUser.name,
-      deletionComment: comment,
-      deletedAt: now(),
-    };
-    // Increment sessionVersion to revoke any active session before deletion
-    const sv = { ...(data.sessionVersion || {}) };
-    sv[deleteTarget.id] = (sv[deleteTarget.id] || 0) + 1;
-    setData(
-      addAudit(
-        {
-          ...data,
-          users: data.users.filter((user) => user.id !== deleteTarget.id),
-          archive: [archived, ...(data.archive || [])],
-          sessionVersion: sv,
-        },
-        "Permanently deleted user — sessions revoked",
-        deleteTarget.id,
-      ),
-    );
-    setDeleteTarget(null);
-    toast("User deleted — all sessions revoked");
+    try {
+      await api.delete(`/api/users/${deleteTarget.id}`, { data: { deletionComment: comment } });
+      setDeleteTarget(null);
+      toast("User deleted — all sessions revoked");
+    } catch (err: any) {
+      toast(err.response?.data?.error || "Failed to delete user");
+    }
   };
 
   const downloadSample = () => {

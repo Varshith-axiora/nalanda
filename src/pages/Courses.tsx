@@ -933,95 +933,51 @@ export default function Courses({
     return { chapters, assessments, issues, ready: issues.length === 0 };
   };
 
-  const saveCourse = () => {
+  const saveCourse = async () => {
     const selectedSkill = data.skills.find(
       (skill) => skill.id === form.skillId,
     );
     if (!selectedSkill) return;
-    const c: Course = {
-      id: uid("CRS"),
-      title: form.title,
-      description: form.description,
-      skill: selectedSkill.name,
-      skillIds: [selectedSkill.id],
-      targetLevel: form.targetLevel,
-      prerequisites: [],
-      category: form.category,
-      tags: form.tags
-        .split(",")
-        .map((t) => t.trim())
-        .filter(Boolean),
-      thumbnailColor: "#22d3ee",
-      ownerId: currentUser.id,
-      approval: "Pending",
-      status: "Active",
-      version: 1,
-      difficulty: form.difficulty,
-      estimatedHours: Number(form.estimatedHours),
-      createdAt: now(),
-      updatedAt: now(),
-    };
-    setData(
-      addAudit(
-        { ...data, courses: [c, ...data.courses] },
-        "Created course",
-        c.id,
-      ),
-    );
-    setCreateOpen(false);
-    setForm({
-      title: "",
-      description: "",
-      skillId: data.skills[0]?.id || "",
-      category: "Technical",
-      tags: "",
-      targetLevel: "Beginner",
-      difficulty: "Beginner",
-      estimatedHours: "4",
-    });
-    toast("Course created successfully");
+    try {
+      await api.post("/api/courses", {
+        title: form.title,
+        description: form.description,
+        skill: selectedSkill.name,
+        category: form.category,
+        tags: form.tags.split(",").map(t => t.trim()).filter(Boolean),
+      });
+      setCreateOpen(false);
+      setForm({
+        title: "",
+        description: "",
+        skillId: data.skills[0]?.id || "",
+        category: "Technical",
+        tags: "",
+        targetLevel: "Beginner",
+        difficulty: "Beginner",
+        estimatedHours: "4",
+      });
+      toast("Course created successfully");
+    } catch (err: any) {
+      toast(err.response?.data?.error || "Failed to create course");
+    }
   };
 
-  const approve = (id: string) => {
-    const course = data.courses.find((c) => c.id === id);
-    if (!course || !getReadiness(course).ready) return;
-    setData(
-      addAudit(
-        {
-          ...data,
-          courses: data.courses.map((c) =>
-            c.id === id
-              ? { ...c, approval: "Approved" as const, updatedAt: now() }
-              : c,
-          ),
-        },
-        "Approved course",
-        id,
-      ),
-    );
-    toast("Course approved successfully");
+  const approve = async (id: string) => {
+    try {
+      await api.patch(`/api/courses/${id}/approval`, { approval: "Approved" });
+      toast("Course approved successfully");
+    } catch (err: any) {
+      toast(err.response?.data?.error || "Failed to approve course");
+    }
   };
-  const reject = (id: string) => {
-    setData(
-      addAudit(
-        {
-          ...data,
-          courses: data.courses.map((c) =>
-            c.id === id
-              ? {
-                  ...c,
-                  approval: "Rejected" as const,
-                  status: "Inactive" as const,
-                  updatedAt: now(),
-                }
-              : c,
-          ),
-        },
-        "Rejected course",
-        id,
-      ),
-    );
-    toast("Course rejected");
+  const reject = async (id: string) => {
+    try {
+      await api.patch(`/api/courses/${id}/approval`, { approval: "Rejected" });
+      toast("Course rejected");
+    } catch (err: any) {
+      toast(err.response?.data?.error || "Failed to reject course");
+    }
   };
 
   const toggleCourseStatus = (course: Course) => {
@@ -1196,39 +1152,13 @@ export default function Courses({
     reader.readAsDataURL(file);
   };
 
-  const assign = (courseId: string, userId: string) => {
-    if (
-      data.enrollments.some(
-        (e) => e.courseId === courseId && e.userId === userId,
-      )
-    )
-      return;
-    setData(
-      addAudit(
-        {
-          ...data,
-          enrollments: [
-            {
-              id: uid("ENR"),
-              courseId,
-              userId,
-              assignedBy: currentUser.id,
-              dueAt: assignmentForm.dueAt || null,
-              priority: assignmentForm.priority,
-              mandatory: assignmentForm.mandatory,
-              progress: 0,
-              completedChapters: [],
-              timeSpentMinutes: 0,
-              startedAt: now(),
-              completedAt: null,
-            },
-            ...data.enrollments,
-          ],
-        },
-        "Assigned course",
-        `${courseId}→${userId}`,
-      ),
-    );
+  const assign = async (courseId: string, userId: string) => {
+    try {
+      await api.post("/api/assignments", { courseId, userIds: [userId] });
+      toast("Course assigned successfully");
+    } catch (err: any) {
+      toast(err.response?.data?.error || "Failed to assign course");
+    }
   };
 
   const handleProgress = (chId: string, mins: number) => {

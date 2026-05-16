@@ -274,39 +274,26 @@ export default function Assessments({
         ];
   };
 
-  const save = (e: FormEvent) => {
+  const save = async (e: FormEvent) => {
     e.preventDefault();
     const chapter = data.chapters.find((item) => item.id === form.chapterId);
-    const course = data.courses.find((item) => item.id === chapter?.courseId);
     if (!chapter) return;
-    const questionLimit = Number(form.questionLimit) || 10;
-    const payload: Assessment = {
-      id: uid("ASM"),
-      title: form.title,
-      chapterId: form.chapterId,
-      courseId: chapter.courseId,
-      type: form.type,
-      ownerId: currentUser.id,
-      approval: isAdminRole(currentUser.role) ? "Approved" : "Pending",
-      difficulty: course?.difficulty || "Beginner",
-      durationMinutes: Number(form.durationMinutes),
-      passScore: Number(form.passScore),
-      questionLimit,
-      questions: ensureQuestionBank(buildQuestions(), questionLimit),
-      createdAt: now(),
-      updatedAt: now(),
-    };
-    setData(
-      addAudit(
-        { ...data, assessments: [payload, ...data.assessments] },
-        "Created assessment",
-        payload.id,
-      ),
-    );
-    setCreateOpen(false);
-    setBulkQuestions([]);
-    setUploadMode(false);
-    toast("Assessment created successfully");
+    try {
+      await api.post("/api/assessments", {
+        title: form.title,
+        chapterId: form.chapterId,
+        type: form.type,
+        durationMinutes: Number(form.durationMinutes),
+        passScore: Number(form.passScore),
+        questions: buildQuestions(),
+      });
+      setCreateOpen(false);
+      setBulkQuestions([]);
+      setUploadMode(false);
+      toast("Assessment created successfully");
+    } catch (err: any) {
+      toast(err.response?.data?.error || "Failed to create assessment");
+    }
   };
 
   const saveEdit = () => {
@@ -426,39 +413,21 @@ export default function Assessments({
     link.click();
   };
 
-  const approve = (id: string) => {
-    setData(
-      addAudit(
-        {
-          ...data,
-          assessments: data.assessments.map((a) =>
-            a.id === id
-              ? { ...a, approval: "Approved" as const, updatedAt: now() }
-              : a,
-          ),
-        },
-        "Approved assessment",
-        id,
-      ),
-    );
-    toast("Assessment approved successfully");
+  const approve = async (id: string) => {
+    try {
+      await api.patch(`/api/assessments/${id}/approval`, { approval: "Approved" });
+      toast("Assessment approved successfully");
+    } catch (err: any) {
+      toast(err.response?.data?.error || "Failed to approve assessment");
+    }
   };
-  const reject = (id: string) => {
-    setData(
-      addAudit(
-        {
-          ...data,
-          assessments: data.assessments.map((a) =>
-            a.id === id
-              ? { ...a, approval: "Rejected" as const, updatedAt: now() }
-              : a,
-          ),
-        },
-        "Rejected assessment",
-        id,
-      ),
-    );
-    toast("Assessment rejected");
+  const reject = async (id: string) => {
+    try {
+      await api.patch(`/api/assessments/${id}/approval`, { approval: "Rejected" });
+      toast("Assessment rejected");
+    } catch (err: any) {
+      toast(err.response?.data?.error || "Failed to reject assessment");
+    }
   };
 
   const toggleAssessmentStatus = (assessment: Assessment) => {
