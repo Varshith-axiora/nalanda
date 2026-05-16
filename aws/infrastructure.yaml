@@ -1,0 +1,115 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Nalanda Platform: EC2 Backend — Simplified for ap-south-1 (Mumbai)'
+
+Parameters:
+  KeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: Name of an existing EC2 KeyPair in ap-south-1 (Mumbai)
+
+  InstanceType:
+    Type: String
+    Default: t3.micro
+    AllowedValues: [t3.micro, t3.small, t3.medium]
+    Description: EC2 instance type (t3.micro is free-tier eligible)
+
+Resources:
+
+  # ── 1. Security Group ────────────────────────────────────────────────────────
+  BackendSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Nalanda Backend - Allow HTTP, HTTPS, SSH, and App Port
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 5000
+          ToPort: 5000
+          CidrIp: 0.0.0.0/0
+
+  # ── 2. IAM Role for CodeDeploy + S3 ─────────────────────────────────────────
+  EC2InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: NalandaEC2Role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonEC2RoleforAWSCodeDeploy
+        - arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess
+        - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
+
+  EC2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref EC2InstanceRole
+
+  # ── 3. EC2 Instance ──────────────────────────────────────────────────────────
+  BackendInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      # Ubuntu 22.04 LTS — ap-south-1 (Mumbai) — verified AMI ID
+      ImageId: ami-0f58b397bc5c1f2e8
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref KeyName
+      SecurityGroups:
+        - !Ref BackendSecurityGroup
+      IamInstanceProfile: !Ref EC2InstanceProfile
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeSize: 20
+            VolumeType: gp3
+      # Minimal UserData - just installs CodeDeploy agent
+      # Everything else is handled by deployment scripts
+      UserData:
+        Fn::Base64: |
+          #!/bin/bash
+          set -e
+          apt-get update -y
+          apt-get install -y ruby-full wget curl
+          cd /tmp
+          wget https://aws-codedeploy-ap-south-1.s3.ap-south-1.amazonaws.com/latest/install
+          chmod +x ./install
+          ./install auto
+          systemctl enable codedeploy-agent
+          systemctl start codedeploy-agent
+      Tags:
+        - Key: Name
+          Value: Nalanda-Backend
+        - Key: Environment
+          Value: Production
+
+  # ── 4. Elastic IP (Static) ───────────────────────────────────────────────────
+  InstanceEIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      InstanceId: !Ref BackendInstance
+      Domain: vpc
+
+Outputs:
+  PublicIP:
+    Description: Static Public IP of your Backend Server
+    Value: !Ref InstanceEIP
+  SSHCommand:
+    Description: SSH command to connect to your server
+    Value: !Sub 'ssh -i nalanda-key.pem ubuntu@${InstanceEIP}'
+  HealthCheckURL:
+    Description: URL to test your backend after deployment
+    Value: !Sub 'http://${InstanceEIP}/api/health'

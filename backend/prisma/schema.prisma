@@ -1,0 +1,111 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id                  String       @id
+  name                String
+  email               String       @unique
+  passwordHash        String
+  department          String
+  role                String
+  managerId           String?
+  manager             User?        @relation("UserToManager", fields: [managerId], references: [id])
+  team                User[]       @relation("UserToManager")
+  status              String       @default("Active")
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+  courses             Course[]     @relation("CourseOwner")
+  enrollments         Enrollment[]
+  assignments         Assignment[] @relation("AssignedTo")
+  assignmentsAssigned Assignment[] @relation("AssignedBy")
+}
+
+model Course {
+  id           String       @id
+  title        String
+  description  String
+  skill        String
+  tags         String[]
+  contentTypes String[]
+  approval     String       @default("Pending")
+  status       String       @default("Active")
+  ownerId      String
+  owner        User         @relation("CourseOwner", fields: [ownerId], references: [id])
+  version      Int          @default(1)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  assessments  Assessment[]
+  enrollments  Enrollment[]
+  assignments  Assignment[]
+}
+
+model Assessment {
+  id              String   @id
+  title           String
+  courseId        String
+  course          Course   @relation(fields: [courseId], references: [id])
+  type            String
+  approval        String   @default("Pending")
+  strictMode      Boolean  @default(true)
+  questions       Json
+  durationMinutes Int
+  passScore       Int
+  ownerId         String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model Enrollment {
+  id               String    @id @default(uuid())
+  userId           String
+  courseId         String
+  user             User      @relation(fields: [userId], references: [id])
+  course           Course    @relation(fields: [courseId], references: [id])
+  progress         Int       @default(0)
+  timeSpentSeconds Int       @default(0)
+  status           String    @default("InProgress")
+  completedAt      DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+}
+
+model Assignment {
+  id               String    @id @default(uuid())
+  courseId         String
+  userId           String
+  assignedBy       String
+  user             User      @relation("AssignedTo", fields: [userId], references: [id])
+  assigner         User      @relation("AssignedBy", fields: [assignedBy], references: [id])
+  course           Course    @relation(fields: [courseId], references: [id])
+  progress         Int       @default(0)
+  timeSpentSeconds Int       @default(0)
+  completedAt      DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  actorId    String
+  action     String
+  entityType String
+  entityId   String
+  metadata   Json?
+  createdAt  DateTime @default(now())
+}
+
+model Archive {
+  id              String   @id @default(uuid())
+  entityType      String
+  entityId        String
+  entityData      Json
+  deletedBy       String
+  deletedByName   String
+  deletionComment String
+  deletedAt       DateTime @default(now())
+}

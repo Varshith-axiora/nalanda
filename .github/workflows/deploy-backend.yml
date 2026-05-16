@@ -1,0 +1,41 @@
+name: Deploy Backend to EC2 via CodeDeploy
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'backend/**'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Zip Backend Artifacts
+        run: |
+          # We only need to zip the backend folder as CodeDeploy will run appspec.yml
+          # which expects the backend directory structure.
+          zip -r backend-deploy.zip backend/
+
+      - name: Upload Artifact to S3
+        run: |
+          aws s3 cp backend-deploy.zip s3://${{ secrets.CODEDEPLOY_S3_BUCKET }}/backend-deploy-${{ github.sha }}.zip
+
+      - name: Trigger CodeDeploy
+        run: |
+          aws deploy create-deployment \
+            --application-name ${{ secrets.CODEDEPLOY_APP_NAME }} \
+            --deployment-group-name ${{ secrets.CODEDEPLOY_GROUP_NAME }} \
+            --s3-location bucket=${{ secrets.CODEDEPLOY_S3_BUCKET }},key=backend-deploy-${{ github.sha }}.zip,bundleType=zip \
+            --description "Deployment ${{ github.sha }}"

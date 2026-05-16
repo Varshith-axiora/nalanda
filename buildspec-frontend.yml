@@ -1,0 +1,37 @@
+version: 0.2
+
+env:
+  variables:
+    # Set these in your CodeBuild project configuration
+    # S3_BUCKET_NAME: "your-frontend-bucket"
+    # CLOUDFRONT_DIST_ID: "E1XXXXXXX"
+  exported-variables:
+    - VITE_API_URL
+
+phases:
+  install:
+    runtime-versions:
+      nodejs: 18
+    commands:
+      - echo "Installing frontend dependencies"
+      - npm install
+  build:
+    commands:
+      - echo "Building for production (includes Vite production optimization)"
+      - npm run build
+  post_build:
+    commands:
+      - echo "Deploying to S3 bucket: $S3_BUCKET_NAME"
+      # Sync the dist folder to S3, removing deleted files
+      - aws s3 sync dist/ s3://$S3_BUCKET_NAME --delete
+      
+      # Ensure SPA Routing works by forcing cache-control on index.html
+      - aws s3 cp s3://$S3_BUCKET_NAME/index.html s3://$S3_BUCKET_NAME/index.html --metadata-directive REPLACE --cache-control max-age=0,no-cache,no-store,must-revalidate --content-type text/html
+      
+      - echo "Invalidating CloudFront cache for distribution: $CLOUDFRONT_DIST_ID"
+      - aws cloudfront create-invalidation --distribution-id $CLOUDFRONT_DIST_ID --paths "/*"
+
+artifacts:
+  files:
+    - '**/*'
+  base-directory: dist
