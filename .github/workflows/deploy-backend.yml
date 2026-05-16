@@ -26,7 +26,7 @@ jobs:
         run: |
           # We only need to zip the backend folder as CodeDeploy will run appspec.yml
           # which expects the backend directory structure.
-          zip -r backend-deploy.zip backend/
+          cd backend && zip -r ../backend-deploy.zip . && cd ..
 
       - name: Upload Artifact to S3
         run: |
