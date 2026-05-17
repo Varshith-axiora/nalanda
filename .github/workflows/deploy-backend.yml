@@ -1,4 +1,4 @@
-name: Deploy Backend to EC2 via CodeDeploy
+name: Deploy Backend to EC2 via SSH
 
 on:
   push:
@@ -15,27 +15,23 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v3
 
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - name: Copy files to EC2
+        uses: appleboy/scp-action@v0.1.4
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ap-south-1
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: "backend/*"
+          target: "/home/ubuntu/nalanda"
 
-      - name: Zip Backend Artifacts
-        run: |
-          # We only need to zip the backend folder as CodeDeploy will run appspec.yml
-          # which expects the backend directory structure.
-          cd backend && zip -r ../backend-deploy.zip . && cd ..
-
-      - name: Upload Artifact to S3
-        run: |
-          aws s3 cp backend-deploy.zip s3://${{ secrets.CODEDEPLOY_S3_BUCKET }}/backend-deploy-${{ github.sha }}.zip
-
-      - name: Trigger CodeDeploy
-        run: |
-          aws deploy create-deployment \
-            --application-name ${{ secrets.CODEDEPLOY_APP_NAME }} \
-            --deployment-group-name ${{ secrets.CODEDEPLOY_GROUP_NAME }} \
-            --s3-location bucket=${{ secrets.CODEDEPLOY_S3_BUCKET }},key=backend-deploy-${{ github.sha }}.zip,bundleType=zip \
-            --description "Deployment ${{ github.sha }}"
+      - name: Install Dependencies and Restart PM2
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd /home/ubuntu/nalanda/backend
+            npm install
+            pm2 restart nalanda-backend || pm2 start ecosystem.config.cjs
+            pm2 save
